@@ -10,6 +10,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="db.js"></script>
+    <!-- EmailJS for password change verification -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>checkAuth();</script>
 </head>
 <body class="daw-body">
@@ -18,10 +20,9 @@
         <div class="header-left">
             <div class="logo glitch" data-text="BEATFORGE">BEATFORGE</div>
             <nav class="header-nav">
-                <a href="#">Dosya</a>
-                <a href="#">Düzenle</a>
                 <a href="#" onclick="showSettings()">Ayarlar</a>
                 <a href="#" onclick="showMyBeats()">Ritimlerim</a>
+                <a href="#" onclick="showMyRecordings()">Kayıtlarım</a>
                 <a href="profile.html">Profil</a>
             </nav>
         </div>
@@ -58,15 +59,17 @@
                 <audio id="vocalAudio" controls style="width: 100%; display: none; margin-top: 10px;"></audio>
             </div>
             <div class="panel-section">
-                <h4>Kayıt & Dışa Aktar</h4>
+                <h4>Kayıt &amp; Dışa Aktar</h4>
                 <button id="recordBeatOnlyBtn" class="daw-btn w-100">● Sistem Sesini Kaydet</button>
                 <button id="recordBtn" class="daw-btn record-mic w-100">🎙️ Mikrofonla Kaydet</button>
-                <button id="downloadBtn" class="daw-btn primary w-100" style="display:none; margin-top:10px;">Şarkıyı İndir (.mp3)</button>
             </div>
             <div id="playbackContainer" class="panel-section" style="display:none;">
                 <h4 style="color: #10b981;">Kayıt Hazır!</h4>
                 <audio id="audioPlayback" controls style="width: 100%; margin-top: 10px;"></audio>
-                <button class="daw-btn danger w-100" onclick="deleteCurrentRecording()" style="margin-top:10px;">Kaydı Çöpe At</button>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                    <button id="saveRecordingBtn" class="daw-btn primary" style="flex:1;">💾 MP3 Kaydet</button>
+                    <button class="daw-btn danger" onclick="deleteCurrentRecording()" style="flex:1;">Çöpe At</button>
+                </div>
             </div>
         </aside>
     </main>
@@ -106,18 +109,98 @@
         </div>
     </div>
 
-    <div id="settingsModal" class="modal">
+    <!-- Kayıtlarım Modal -->
+    <div id="myRecordingsModal" class="modal">
         <div class="modal-content">
+            <span class="close" onclick="closeRecordingsModal()">&times;</span>
+            <h2>🎵 Kayıtlarım</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">Kaydettiğin ses dosyalarını buradan MP3 olarak indirebilirsin.</p>
+            <ul id="recordingsList" class="beats-list"></ul>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
             <span class="close" onclick="closeSettingsModal()">&times;</span>
-            <h2>Ayarlar</h2>
+            <h2>⚙️ Ayarlar</h2>
+            
+            <!-- Nickname Section -->
             <div class="form-group" style="margin-top:20px;">
                 <label>Görünen Adın (Nickname)</label>
                 <input type="text" id="nicknameInput" required class="daw-input" style="width:100%;">
             </div>
             <button class="daw-btn primary w-100" onclick="saveNickname()" style="margin-top:10px;">Kaydet</button>
+            
+            <!-- Divider -->
+            <hr style="border: 1px solid rgba(255,255,255,0.1); margin: 25px 0;">
+            
+            <!-- Password Change Section -->
+            <h3 style="color: var(--accent-secondary); margin-bottom: 15px;">🔒 Şifre Değiştir</h3>
+            <div id="passwordChangeForm">
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label>Mevcut Şifre</label>
+                    <input type="password" id="currentPassword" class="daw-input" style="width:100%;" placeholder="Mevcut şifrenizi girin">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label>Yeni Şifre</label>
+                    <input type="password" id="newPassword" class="daw-input" style="width:100%;" placeholder="En az 8 karakter, 1 büyük harf, 1 özel karakter">
+                </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label>Yeni Şifre (Tekrar)</label>
+                    <input type="password" id="newPasswordConfirm" class="daw-input" style="width:100%;" placeholder="Yeni şifrenizi tekrar girin">
+                </div>
+                <p id="passwordChangeError" style="color: #ef4444; display: none; margin-bottom: 10px; font-size: 0.9rem;"></p>
+                <button class="daw-btn primary w-100" onclick="initiatePasswordChange()">Şifre Değiştirme Kodu Gönder</button>
+            </div>
+            
+            <!-- Verification Code Step (hidden initially) -->
+            <div id="passwordVerifySection" style="display: none;">
+                <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">E-posta adresinize gönderilen 6 haneli doğrulama kodunu girin:</p>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <input type="text" id="passwordVerifyCode" class="daw-input" style="width:100%; text-align: center; font-size: 1.3rem; letter-spacing: 8px;" placeholder="______" maxlength="6">
+                </div>
+                <p id="passwordVerifyError" style="color: #ef4444; display: none; margin-bottom: 10px; font-size: 0.9rem;"></p>
+                <div style="display: flex; gap: 10px;">
+                    <button class="daw-btn" onclick="cancelPasswordChange()" style="flex:1;">Iptal</button>
+                    <button class="daw-btn primary" onclick="confirmPasswordChange()" style="flex:1;">Onayla</button>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- Custom Dialog Modals -->
+    <div id="customInputModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <h2 id="customInputTitle" style="margin-bottom: 15px;"></h2>
+            <input type="text" id="customInputField" class="daw-input" style="width:100%; margin-bottom: 20px; padding: 10px; font-size: 1rem;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="daw-btn" id="customInputCancel">İptal</button>
+                <button class="daw-btn primary" id="customInputOk">Tamam</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="customAlertModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <p id="customAlertMessage" style="margin-bottom: 20px; font-size: 1rem; line-height: 1.5;"></p>
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="daw-btn primary" id="customAlertOk">Tamam</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="customConfirmModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <p id="customConfirmMessage" style="margin-bottom: 20px; font-size: 1rem; line-height: 1.5;"></p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="daw-btn" id="customConfirmCancel">İptal</button>
+                <button class="daw-btn primary" id="customConfirmOk">Evet</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lamejs for MP3 encoding -->
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
     <script src="script.js"></script>
     <script>
         // Auto-load beat from profile page
