@@ -1,5 +1,5 @@
 /**
- * BEATFORGE - Profile Page Logic
+ * BEATFORGE - Profile Page Logic (Firebase Firestore)
  */
 
 const user = getCurrentUser();
@@ -7,57 +7,60 @@ if (!user) {
     window.location.href = 'index.html';
 }
 
-// Load profile data
-function loadProfile() {
-    const db = getDB();
-    const dbUser = db.users.find(u => u.username === user.username);
-    if (!dbUser) return;
+// Load profile data from Firestore
+async function loadProfile() {
+    try {
+        const dbUser = await getUser(user.username);
+        if (!dbUser) return;
 
-    // Avatar - show photo or first letter
-    const nickname = dbUser.nickname || dbUser.username;
-    const avatar = document.getElementById('profileAvatar');
-    const removeBtn = document.getElementById('avatarRemoveBtn');
-    
-    if (dbUser.avatarURL) {
-        avatar.innerHTML = `<img src="${dbUser.avatarURL}" alt="Profil Fotoğrafı">`;
-        if (removeBtn) removeBtn.style.display = 'flex';
-    } else {
-        avatar.innerHTML = '';
-        avatar.textContent = nickname.charAt(0).toUpperCase();
-        if (removeBtn) removeBtn.style.display = 'none';
-    }
-
-    // Info
-    document.getElementById('profileNickname').textContent = nickname;
-    document.getElementById('profileUsername').textContent = '@' + dbUser.username;
-    document.getElementById('profileEmail').textContent = dbUser.email || 'E-posta belirtilmemiş';
-
-    // Edit form
-    document.getElementById('editNickname').value = nickname;
-    document.getElementById('editUsername').value = dbUser.username;
-    document.getElementById('editEmail').value = dbUser.email || '';
-    document.getElementById('editRole').value = dbUser.role === 'admin' ? 'Yönetici' : 'Kullanıcı';
-
-    // Stats
-    const myBeats = db.beats.filter(b => b.username === user.username);
-    document.getElementById('statBeats').textContent = myBeats.length;
-
-    let totalNotes = 0;
-    let totalBpm = 0;
-    myBeats.forEach(beat => {
-        totalBpm += beat.bpm || 120;
-        if (beat.data) {
-            beat.data.forEach(track => {
-                totalNotes += (track.activeSteps || []).length;
-            });
+        // Avatar - show photo or first letter
+        const nickname = dbUser.nickname || dbUser.username;
+        const avatar = document.getElementById('profileAvatar');
+        const removeBtn = document.getElementById('avatarRemoveBtn');
+        
+        if (dbUser.avatarURL) {
+            avatar.innerHTML = `<img src="${dbUser.avatarURL}" alt="Profil Fotoğrafı">`;
+            if (removeBtn) removeBtn.style.display = 'flex';
+        } else {
+            avatar.innerHTML = '';
+            avatar.textContent = nickname.charAt(0).toUpperCase();
+            if (removeBtn) removeBtn.style.display = 'none';
         }
-    });
 
-    document.getElementById('statTotalSteps').textContent = totalNotes;
-    document.getElementById('statAvgBpm').textContent = myBeats.length > 0 ? Math.round(totalBpm / myBeats.length) : 0;
+        // Info
+        document.getElementById('profileNickname').textContent = nickname;
+        document.getElementById('profileUsername').textContent = '@' + dbUser.username;
+        document.getElementById('profileEmail').textContent = dbUser.email || 'E-posta belirtilmemiş';
 
-    // Load beats grid
-    loadBeatsGrid(myBeats);
+        // Edit form
+        document.getElementById('editNickname').value = nickname;
+        document.getElementById('editUsername').value = dbUser.username;
+        document.getElementById('editEmail').value = dbUser.email || '';
+        document.getElementById('editRole').value = dbUser.role === 'admin' ? 'Yönetici' : 'Kullanıcı';
+
+        // Stats from Firestore
+        const myBeats = await getUserBeats(user.username);
+        document.getElementById('statBeats').textContent = myBeats.length;
+
+        let totalNotes = 0;
+        let totalBpm = 0;
+        myBeats.forEach(beat => {
+            totalBpm += beat.bpm || 120;
+            if (beat.data) {
+                beat.data.forEach(track => {
+                    totalNotes += (track.activeSteps || []).length;
+                });
+            }
+        });
+
+        document.getElementById('statTotalSteps').textContent = totalNotes;
+        document.getElementById('statAvgBpm').textContent = myBeats.length > 0 ? Math.round(totalBpm / myBeats.length) : 0;
+
+        // Load beats grid
+        loadBeatsGrid(myBeats);
+    } catch (err) {
+        console.error('Profil yükleme hatası:', err);
+    }
 }
 
 // Load beats into the grid
@@ -137,41 +140,47 @@ function goToStudio(beatId) {
     window.location.href = 'beatmaker.html';
 }
 
-// Delete beat
-function deleteBeat(id) {
+// Delete beat from Firestore
+async function deleteBeat(id) {
     if (!confirm('Bu beat\'i silmek istediğine emin misin?')) return;
 
-    const db = getDB();
-    db.beats = db.beats.filter(b => b.id !== id);
-    saveDB(db);
-
-    // Reload
-    loadProfile();
+    try {
+        await deleteBeatFromDB(id);
+        // Reload
+        loadProfile();
+    } catch (err) {
+        console.error('Beat silme hatası:', err);
+        alert('Beat silinirken bir hata oluştu!');
+    }
 }
 
-// Save profile changes
-function saveProfileChanges() {
+// Save profile changes to Firestore
+async function saveProfileChanges() {
     const newNickname = document.getElementById('editNickname').value.trim();
     if (!newNickname) {
         alert('Görünen ad boş olamaz!');
         return;
     }
 
-    const db = getDB();
-    const dbUser = db.users.find(u => u.username === user.username);
-    if (dbUser) {
-        dbUser.nickname = newNickname;
-        saveDB(db);
+    try {
+        const dbUser = await getUser(user.username);
+        if (dbUser) {
+            dbUser.nickname = newNickname;
+            await saveUser(dbUser);
 
-        user.nickname = newNickname;
-        setCurrentUser(user);
+            user.nickname = newNickname;
+            setCurrentUser(user);
 
-        loadProfile();
-        alert('Profil güncellendi!');
+            loadProfile();
+            alert('Profil güncellendi!');
+        }
+    } catch (err) {
+        console.error('Profil güncelleme hatası:', err);
+        alert('Profil güncellenirken bir hata oluştu!');
     }
 }
 
-// Handle avatar upload
+// Handle avatar upload and save to Firestore
 function handleAvatarUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -190,9 +199,9 @@ function handleAvatarUpload(event) {
 
     const reader = new FileReader();
     reader.onload = function(e) {
-        // Resize image to reduce localStorage usage
+        // Resize image to reduce storage usage
         const img = new Image();
-        img.onload = function() {
+        img.onload = async function() {
             const canvas = document.createElement('canvas');
             const maxSize = 200;
             let width = img.width;
@@ -211,13 +220,17 @@ function handleAvatarUpload(event) {
 
             const dataURL = canvas.toDataURL('image/jpeg', 0.85);
 
-            // Save to DB
-            const db = getDB();
-            const dbUser = db.users.find(u => u.username === user.username);
-            if (dbUser) {
-                dbUser.avatarURL = dataURL;
-                saveDB(db);
-                loadProfile();
+            // Save to Firestore
+            try {
+                const dbUser = await getUser(user.username);
+                if (dbUser) {
+                    dbUser.avatarURL = dataURL;
+                    await saveUser(dbUser);
+                    loadProfile();
+                }
+            } catch (err) {
+                console.error('Avatar kaydetme hatası:', err);
+                alert('Profil fotoğrafı yüklenirken bir hata oluştu!');
             }
         };
         img.src = e.target.result;
@@ -228,16 +241,20 @@ function handleAvatarUpload(event) {
     event.target.value = '';
 }
 
-// Remove avatar
-function removeAvatar() {
+// Remove avatar from Firestore
+async function removeAvatar() {
     if (!confirm('Profil fotoğrafını kaldırmak istediğine emin misin?')) return;
 
-    const db = getDB();
-    const dbUser = db.users.find(u => u.username === user.username);
-    if (dbUser) {
-        delete dbUser.avatarURL;
-        saveDB(db);
-        loadProfile();
+    try {
+        const dbUser = await getUser(user.username);
+        if (dbUser) {
+            delete dbUser.avatarURL;
+            await saveUser(dbUser);
+            loadProfile();
+        }
+    } catch (err) {
+        console.error('Avatar silme hatası:', err);
+        alert('Profil fotoğrafı kaldırılırken bir hata oluştu!');
     }
 }
 

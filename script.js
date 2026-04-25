@@ -1,5 +1,5 @@
 /**
- * SiNUbeatmaker - Script.js (Studio Logic)
+ * SiNUbeatmaker - Script.js (Studio Logic - Firebase Firestore)
  */
 
 const user = getCurrentUser();
@@ -129,70 +129,74 @@ const instrumentsMap = {
     'bass': SoundEngine.playBass
 };
 
-// Custom Sounds from DB
+// Custom Sounds from Firestore
 async function loadCustomSoundsToGrid() {
-    const db = getDB();
-    const sequencer = document.getElementById('sequencer');
-    
-    for (const sound of db.customSounds) {
-        if(document.querySelector(`.track[data-instrument="${sound.id}"]`)) continue;
+    try {
+        const customSounds = await getCustomSounds();
+        const sequencer = document.getElementById('sequencer');
         
-        let audioBuffer = null;
-        if (sound.type === 'file' && sound.dataURL) {
-            try {
-                const response = await fetch(sound.dataURL);
-                const arrayBuffer = await response.arrayBuffer();
-                audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            } catch (e) {
-                console.error("Ses dosyası çözümlenemedi: ", sound.name, e);
-            }
-        }
-        
-        instrumentsMap[sound.id] = (time) => {
-            if (audioBuffer) {
-                const source = audioCtx.createBufferSource();
-                source.buffer = audioBuffer;
-                const gain = audioCtx.createGain();
-                source.connect(gain);
-                connectToMix(gain);
-                gain.gain.setValueAtTime(0.8, time);
-                source.start(time);
-            } else {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.connect(gain);
-                connectToMix(gain);
-                osc.frequency.setValueAtTime(400, time);
-                osc.frequency.exponentialRampToValueAtTime(100, time + 0.2);
-                gain.gain.setValueAtTime(0.5, time);
-                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
-                osc.start(time); osc.stop(time + 0.2);
-            }
-        };
-        
-        const track = document.createElement('div');
-        track.className = 'track custom-track';
-        track.dataset.instrument = sound.id;
-        track.innerHTML = `<div class="track-label">${sound.name}</div><div class="pads-container"></div>`;
-        sequencer.appendChild(track);
-        
-        const container = track.querySelector('.pads-container');
-        for (let i = 0; i < STEPS; i++) {
-            const pad = document.createElement('div');
-            pad.className = 'pad';
-            pad.dataset.step = i;
-            pad.addEventListener('click', () => {
-                pad.classList.toggle('active');
-                if(pad.classList.contains('active')) {
-                     if (audioCtx.state === 'suspended') audioCtx.resume();
-                     instrumentsMap[sound.id](audioCtx.currentTime);
-                     pad.classList.add('playing');
-                     setTimeout(() => pad.classList.remove('playing'), 100);
+        for (const sound of customSounds) {
+            if(document.querySelector(`.track[data-instrument="${sound.id}"]`)) continue;
+            
+            let audioBuffer = null;
+            if (sound.type === 'file' && sound.dataURL) {
+                try {
+                    const response = await fetch(sound.dataURL);
+                    const arrayBuffer = await response.arrayBuffer();
+                    audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                } catch (e) {
+                    console.error("Ses dosyası çözümlenemedi: ", sound.name, e);
                 }
-            });
-            container.appendChild(pad);
+            }
+            
+            instrumentsMap[sound.id] = (time) => {
+                if (audioBuffer) {
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    const gain = audioCtx.createGain();
+                    source.connect(gain);
+                    connectToMix(gain);
+                    gain.gain.setValueAtTime(0.8, time);
+                    source.start(time);
+                } else {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.connect(gain);
+                    connectToMix(gain);
+                    osc.frequency.setValueAtTime(400, time);
+                    osc.frequency.exponentialRampToValueAtTime(100, time + 0.2);
+                    gain.gain.setValueAtTime(0.5, time);
+                    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+                    osc.start(time); osc.stop(time + 0.2);
+                }
+            };
+            
+            const track = document.createElement('div');
+            track.className = 'track custom-track';
+            track.dataset.instrument = sound.id;
+            track.innerHTML = `<div class="track-label">${sound.name}</div><div class="pads-container"></div>`;
+            sequencer.appendChild(track);
+            
+            const container = track.querySelector('.pads-container');
+            for (let i = 0; i < STEPS; i++) {
+                const pad = document.createElement('div');
+                pad.className = 'pad';
+                pad.dataset.step = i;
+                pad.addEventListener('click', () => {
+                    pad.classList.toggle('active');
+                    if(pad.classList.contains('active')) {
+                         if (audioCtx.state === 'suspended') audioCtx.resume();
+                         instrumentsMap[sound.id](audioCtx.currentTime);
+                         pad.classList.add('playing');
+                         setTimeout(() => pad.classList.remove('playing'), 100);
+                    }
+                });
+                container.appendChild(pad);
+            }
         }
+    } catch (err) {
+        console.error('Özel sesler yüklenirken hata:', err);
     }
 }
 
@@ -339,8 +343,8 @@ clearBtn.addEventListener('click', () => {
 
 bpmSlider.addEventListener('input', (e) => { bpm = parseInt(e.target.value); bpmValue.textContent = bpm; });
 
-// --- Save & Load Beats ---
-document.getElementById('saveBeatBtn').addEventListener('click', () => {
+// --- Save & Load Beats (Firebase Firestore) ---
+document.getElementById('saveBeatBtn').addEventListener('click', async () => {
     const name = prompt('Ritmin için bir isim belirle:');
     if (!name) return;
     
@@ -354,64 +358,72 @@ document.getElementById('saveBeatBtn').addEventListener('click', () => {
         beatData.push({ instrument, activeSteps });
     });
     
-    const db = getDB();
-    db.beats.push({
+    const beat = {
         id: 'beat_' + Date.now(),
         username: user.username,
         name: name,
         data: beatData,
         bpm: bpm,
         date: new Date().toISOString()
-    });
-    saveDB(db);
-    alert('Ritim başarıyla kaydedildi!');
+    };
+    
+    try {
+        await saveBeat(beat);
+        alert('Ritim başarıyla kaydedildi!');
+    } catch (err) {
+        console.error('Beat kaydetme hatası:', err);
+        alert('Ritim kaydedilirken bir hata oluştu!');
+    }
 });
 
-function showMyBeats() {
-    const db = getDB();
-    const myBeats = db.beats.filter(b => b.username === user.username);
-    const list = document.getElementById('beatsList');
-    list.innerHTML = '';
-    
-    if(myBeats.length === 0) {
-        list.innerHTML = '<li>Henüz kaydedilmiş bir ritmin yok.</li>';
-    } else {
-        myBeats.forEach(beat => {
-            const li = document.createElement('li');
-            li.style.flexDirection = 'column';
-            li.style.alignItems = 'flex-start';
-            li.innerHTML = `
-                <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 15px;">
-                    <strong>${beat.name} (${beat.bpm} BPM)</strong>
-                    <span style="font-size:0.8rem; color:#aaa;">${new Date(beat.date).toLocaleDateString()}</span>
-                </div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
-                    <button class="btn-primary btn-sm" onclick="loadBeat('${beat.id}')">Stüdyoya Yükle</button>
-                    <button class="btn-secondary btn-sm" onclick="autoRecordBeat('${beat.id}')" style="background:rgba(59, 130, 246, 0.2); border-color:#3b82f6; color:#3b82f6;">Sesi İndir (MP3)</button>
-                    <button class="btn-danger btn-sm" onclick="deleteBeat('${beat.id}')" style="margin-left:auto;">Sil</button>
-                </div>
-            `;
-            list.appendChild(li);
-        });
+async function showMyBeats() {
+    try {
+        const myBeats = await getUserBeats(user.username);
+        const list = document.getElementById('beatsList');
+        list.innerHTML = '';
+        
+        if(myBeats.length === 0) {
+            list.innerHTML = '<li>Henüz kaydedilmiş bir ritmin yok.</li>';
+        } else {
+            myBeats.forEach(beat => {
+                const li = document.createElement('li');
+                li.style.flexDirection = 'column';
+                li.style.alignItems = 'flex-start';
+                li.innerHTML = `
+                    <div style="width: 100%; display: flex; justify-content: space-between; margin-bottom: 15px;">
+                        <strong>${beat.name} (${beat.bpm} BPM)</strong>
+                        <span style="font-size:0.8rem; color:#aaa;">${new Date(beat.date).toLocaleDateString()}</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
+                        <button class="btn-primary btn-sm" onclick="loadBeat('${beat.id}')">Stüdyoya Yükle</button>
+                        <button class="btn-secondary btn-sm" onclick="autoRecordBeat('${beat.id}')" style="background:rgba(59, 130, 246, 0.2); border-color:#3b82f6; color:#3b82f6;">Sesi İndir (MP3)</button>
+                        <button class="btn-danger btn-sm" onclick="deleteBeat('${beat.id}')" style="margin-left:auto;">Sil</button>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+        document.getElementById('myBeatsModal').style.display = 'flex';
+    } catch (err) {
+        console.error('Beatler yüklenirken hata:', err);
+        alert('Ritimler yüklenirken bir hata oluştu!');
     }
-    document.getElementById('myBeatsModal').style.display = 'flex';
 }
 
 function downloadBeatData(id) {
-    const db = getDB();
-    const beat = db.beats.find(b => b.id === id);
-    if (!beat) return;
-    
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(beat, null, 2));
-    const a = document.createElement('a');
-    a.href = dataStr;
-    a.download = `SiNUbeatmaker_proje_${beat.name.replace(/\s+/g, '_')}.json`;
-    a.click();
+    getBeat(id).then(beat => {
+        if (!beat) return;
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(beat, null, 2));
+        const a = document.createElement('a');
+        a.href = dataStr;
+        a.download = `SiNUbeatmaker_proje_${beat.name.replace(/\s+/g, '_')}.json`;
+        a.click();
+    });
 }
 
-function autoRecordBeat(id) {
+async function autoRecordBeat(id) {
     closeModal();
-    loadBeat(id);
+    await loadBeat(id);
     
     setTimeout(() => {
         const btn = document.getElementById('recordBeatOnlyBtn');
@@ -439,39 +451,45 @@ function autoRecordBeat(id) {
 
 function closeModal() { document.getElementById('myBeatsModal').style.display = 'none'; }
 
-function loadBeat(id) {
-    const db = getDB();
-    const beat = db.beats.find(b => b.id === id);
-    if (!beat) return;
-    
-    // Clear current
-    document.querySelectorAll('.pad').forEach(pad => pad.classList.remove('active'));
-    
-    // Set BPM
-    bpm = beat.bpm || 120;
-    bpmSlider.value = bpm;
-    bpmValue.textContent = bpm;
-    
-    // Load pads
-    beat.data.forEach(trackData => {
-        const track = document.querySelector(`.track[data-instrument="${trackData.instrument}"]`);
-        if (track) {
-            const pads = track.querySelectorAll('.pad');
-            trackData.activeSteps.forEach(step => {
-                if(pads[step]) pads[step].classList.add('active');
-            });
-        }
-    });
-    
-    closeModal();
+async function loadBeat(id) {
+    try {
+        const beat = await getBeat(id);
+        if (!beat) return;
+        
+        // Clear current
+        document.querySelectorAll('.pad').forEach(pad => pad.classList.remove('active'));
+        
+        // Set BPM
+        bpm = beat.bpm || 120;
+        bpmSlider.value = bpm;
+        bpmValue.textContent = bpm;
+        
+        // Load pads
+        beat.data.forEach(trackData => {
+            const track = document.querySelector(`.track[data-instrument="${trackData.instrument}"]`);
+            if (track) {
+                const pads = track.querySelectorAll('.pad');
+                trackData.activeSteps.forEach(step => {
+                    if(pads[step]) pads[step].classList.add('active');
+                });
+            }
+        });
+        
+        closeModal();
+    } catch (err) {
+        console.error('Beat yükleme hatası:', err);
+    }
 }
 
-function deleteBeat(id) {
+async function deleteBeat(id) {
     if(confirm('Ritmi silmek istediğine emin misin?')) {
-        const db = getDB();
-        db.beats = db.beats.filter(b => b.id !== id);
-        saveDB(db);
-        showMyBeats();
+        try {
+            await deleteBeatFromDB(id);
+            showMyBeats();
+        } catch (err) {
+            console.error('Beat silme hatası:', err);
+            alert('Ritim silinirken bir hata oluştu!');
+        }
     }
 }
 
@@ -599,7 +617,7 @@ recordBeatOnlyBtn.addEventListener('click', () => {
     }
 });
 
-// --- Settings & Nickname ---
+// --- Settings & Nickname (Firebase) ---
 function showSettings() {
     document.getElementById('nicknameInput').value = user.nickname || user.username;
     document.getElementById('settingsModal').style.display = 'flex';
@@ -609,25 +627,29 @@ function closeSettingsModal() {
     document.getElementById('settingsModal').style.display = 'none';
 }
 
-function saveNickname() {
+async function saveNickname() {
     const newNickname = document.getElementById('nicknameInput').value.trim();
     if (!newNickname) return;
     
-    // Update DB
-    const db = getDB();
-    const dbUser = db.users.find(u => u.username === user.username);
-    if (dbUser) {
-        dbUser.nickname = newNickname;
-        saveDB(db);
-        
-        // Update current session
-        user.nickname = newNickname;
-        setCurrentUser(user);
-        
-        // Update UI
-        document.getElementById('welcomeUser').textContent = `Hoş geldin, ${user.nickname}`;
-        closeSettingsModal();
-        alert('Görünen adın güncellendi!');
+    try {
+        // Firestore'da güncelle
+        const dbUser = await getUser(user.username);
+        if (dbUser) {
+            dbUser.nickname = newNickname;
+            await saveUser(dbUser);
+            
+            // Oturumu güncelle
+            user.nickname = newNickname;
+            setCurrentUser(user);
+            
+            // UI güncelle
+            document.getElementById('welcomeUser').textContent = `Hoş geldin, ${user.nickname}`;
+            closeSettingsModal();
+            alert('Görünen adın güncellendi!');
+        }
+    } catch (err) {
+        console.error('Nickname güncelleme hatası:', err);
+        alert('Görünen ad güncellenirken bir hata oluştu!');
     }
 }
 

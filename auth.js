@@ -1,3 +1,19 @@
+/**
+ * SiNU-BeatMaker - Kimlik Doğrulama (Firebase Firestore + EmailJS)
+ * Giriş, Kayıt, 2FA, Şifre Sıfırlama işlemleri
+ */
+
+// EmailJS Yapılandırma
+const EMAILJS_SERVICE_ID = 'service_d2efpvb';
+const EMAILJS_TEMPLATE_ID = 'template_m2bp3ut';
+const EMAILJS_PUBLIC_KEY = 'lByNoDcgGqq-2kbhn';
+
+// EmailJS'i başlat
+if (typeof emailjs !== 'undefined') {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+    console.log('📧 EmailJS bağlantısı kuruldu.');
+}
+
 // SHA-256 Hash Function using Web Crypto API
 async function sha256(message) {
     const msgBuffer = new TextEncoder().encode(message);
@@ -30,6 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const forgotForm = document.getElementById('forgotForm');
     const resetForm2 = document.getElementById('resetForm');
     
+    // ==========================================
+    // GİRİŞ YAP
+    // ==========================================
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -37,23 +56,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const pass = document.getElementById('loginPassword').value;
             const hash = await sha256(pass);
             
-            const db = getDB();
-            const user = db.users.find(u => u.username === username && u.passwordHash === hash);
-            
-            if (user) {
-                setCurrentUser({ username: user.username, nickname: user.nickname || user.username, role: user.role });
-                if (user.role === 'admin') {
-                    window.location.href = 'admin.html';
+            try {
+                const user = await getUser(username);
+                
+                if (user && user.passwordHash === hash) {
+                    setCurrentUser({ username: user.username, nickname: user.nickname || user.username, role: user.role });
+                    if (user.role === 'admin') {
+                        window.location.href = 'admin.html';
+                    } else {
+                        window.location.href = 'beatmaker.html';
+                    }
                 } else {
-                    window.location.href = 'beatmaker.html';
+                    document.getElementById('loginError').textContent = 'Hatalı kullanıcı adı veya şifre!';
+                    document.getElementById('loginError').style.display = 'block';
                 }
-            } else {
-                document.getElementById('loginError').textContent = 'Hatalı kullanıcı adı veya şifre!';
+            } catch (err) {
+                console.error('Giriş hatası:', err);
+                document.getElementById('loginError').textContent = 'Sunucu bağlantısı hatası! Lütfen tekrar deneyin.';
                 document.getElementById('loginError').style.display = 'block';
             }
         });
     }
 
+    // ==========================================
+    // KAYIT OL
+    // ==========================================
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -62,68 +89,88 @@ document.addEventListener('DOMContentLoaded', () => {
             const pass = document.getElementById('regPassword').value;
             const passConfirm = document.getElementById('regPasswordConfirm').value;
             
+            // Şifre eşleşme kontrolü
             if (pass !== passConfirm) {
                 document.getElementById('regError').textContent = 'Şifreler eşleşmiyor!';
                 document.getElementById('regError').style.display = 'block';
                 return;
             }
             
-            const db = getDB();
-            if (db.users.find(u => u.username === username)) {
-                document.getElementById('regError').textContent = 'Bu kullanıcı adı zaten alınmış!';
+            // Şifre güvenlik kuralları kontrolü
+            const passwordError = validatePassword(pass);
+            if (passwordError) {
+                document.getElementById('regError').textContent = passwordError;
                 document.getElementById('regError').style.display = 'block';
                 return;
             }
-            if (db.users.find(u => u.email === email)) {
-                document.getElementById('regError').textContent = 'Bu e-posta adresi zaten kullanımda!';
-                document.getElementById('regError').style.display = 'block';
-                return;
-            }
-            
-            const hash = await sha256(pass);
-            const code = generateUniqueCode();
-            
-            tempRegistrationData = {
-                email: email,
-                username: username,
-                passwordHash: hash,
-                code: code
-            };
-            
-            // Send real verification email via n8n webhook
-            const submitBtn = registerForm.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.textContent;
-            submitBtn.textContent = 'Doğrulama kodu gönderiliyor...';
-            submitBtn.disabled = true;
             
             try {
-                const response = await fetch('http://localhost:5678/webhook/verify-email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email, code: code })
-                });
+                // Kullanıcı adı kontrolü
+                const existingUser = await getUser(username);
+                if (existingUser) {
+                    document.getElementById('regError').textContent = 'Bu kullanıcı adı zaten alınmış!';
+                    document.getElementById('regError').style.display = 'block';
+                    return;
+                }
                 
-                if (!response.ok) throw new Error('E-posta gönderilemedi');
+                // E-posta kontrolü
+                const existingEmail = await getUserByEmail(email);
+                if (existingEmail) {
+                    document.getElementById('regError').textContent = 'Bu e-posta adresi zaten kullanımda!';
+                    document.getElementById('regError').style.display = 'block';
+                    return;
+                }
                 
-                document.getElementById('registerBox').style.display = 'none';
-                document.getElementById('twoFaBox').style.display = 'block';
-                document.getElementById('twoFaError').style.display = 'none';
+                const hash = await sha256(pass);
+                const code = generateUniqueCode();
+                
+                tempRegistrationData = {
+                    email: email,
+                    username: username,
+                    passwordHash: hash,
+                    code: code
+                };
+                
+                // EmailJS ile doğrulama e-postası gönder
+                const submitBtn = registerForm.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.textContent;
+                submitBtn.textContent = 'Doğrulama kodu gönderiliyor...';
+                submitBtn.disabled = true;
+                
+                try {
+                    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+                        email: email,
+                        code: code
+                    });
+                    console.log('✅ Doğrulama e-postası gönderildi:', email);
+                    
+                    document.getElementById('registerBox').style.display = 'none';
+                    document.getElementById('twoFaBox').style.display = 'block';
+                    document.getElementById('twoFaError').style.display = 'none';
+                } catch (err) {
+                    console.error('EmailJS hatası:', err);
+                    // Fallback: e-posta gönderilemezse kodu alert ile göster
+                    alert(`E-posta servisi şu an çalışmıyor.\nDoğrulama kodunuz: ${code}`);
+                    document.getElementById('registerBox').style.display = 'none';
+                    document.getElementById('twoFaBox').style.display = 'block';
+                    document.getElementById('twoFaError').style.display = 'none';
+                } finally {
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = false;
+                }
             } catch (err) {
-                console.error('n8n webhook hatası:', err);
-                // Fallback: simülasyon olarak alert ile göster
-                alert(`E-posta servisi şu an çalışmıyor.\nDoğrulama kodunuz: ${code}`);
-                document.getElementById('registerBox').style.display = 'none';
-                document.getElementById('twoFaBox').style.display = 'block';
-                document.getElementById('twoFaError').style.display = 'none';
-            } finally {
-                submitBtn.textContent = originalBtnText;
-                submitBtn.disabled = false;
+                console.error('Kayıt hatası:', err);
+                document.getElementById('regError').textContent = 'Sunucu bağlantısı hatası! Lütfen tekrar deneyin.';
+                document.getElementById('regError').style.display = 'block';
             }
         });
     }
 
+    // ==========================================
+    // 2FA DOĞRULAMA (Kayıt tamamlama)
+    // ==========================================
     if (twoFaForm) {
-        twoFaForm.addEventListener('submit', (e) => {
+        twoFaForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const codeInput = document.getElementById('twoFaCode').value.trim();
             
@@ -134,26 +181,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (codeInput === tempRegistrationData.code) {
-                // Code matches, finalize registration
-                const db = getDB();
-                db.users.push({
-                    username: tempRegistrationData.username,
-                    nickname: tempRegistrationData.username, // Default nickname
-                    email: tempRegistrationData.email,
-                    passwordHash: tempRegistrationData.passwordHash,
-                    role: 'user'
-                });
-                saveDB(db);
-                
-                tempRegistrationData = null;
-                alert('Kayıt ve e-posta doğrulama başarılı! Lütfen giriş yapın.');
-                
-                document.getElementById('twoFaBox').style.display = 'none';
-                document.getElementById('loginBox').style.display = 'block';
-                
-                // Reset forms
-                document.getElementById('registerForm').reset();
-                document.getElementById('twoFaForm').reset();
+                // Code matches, finalize registration in Firestore
+                try {
+                    await saveUser({
+                        username: tempRegistrationData.username,
+                        nickname: tempRegistrationData.username, // Default nickname
+                        email: tempRegistrationData.email,
+                        passwordHash: tempRegistrationData.passwordHash,
+                        role: 'user'
+                    });
+                    
+                    tempRegistrationData = null;
+                    alert('Kayıt ve e-posta doğrulama başarılı! Lütfen giriş yapın.');
+                    
+                    document.getElementById('twoFaBox').style.display = 'none';
+                    document.getElementById('loginBox').style.display = 'block';
+                    
+                    // Reset forms
+                    document.getElementById('registerForm').reset();
+                    document.getElementById('twoFaForm').reset();
+                } catch (err) {
+                    console.error('Kayıt kaydetme hatası:', err);
+                    document.getElementById('twoFaError').textContent = 'Kayıt sırasında bir hata oluştu! Tekrar deneyin.';
+                    document.getElementById('twoFaError').style.display = 'block';
+                }
             } else {
                 document.getElementById('twoFaError').textContent = 'Doğrulama kodu hatalı!';
                 document.getElementById('twoFaError').style.display = 'block';
@@ -161,53 +212,61 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Forgot Password: Send reset code
+    // ==========================================
+    // ŞİFREMİ UNUTTUM: Sıfırlama kodu gönder
+    // ==========================================
     if (forgotForm) {
         forgotForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const emailInput = document.getElementById('forgotEmail').value.trim();
             const email = emailInput + '@gmail.com';
             
-            const db = getDB();
-            const user = db.users.find(u => u.email === email);
-            
-            if (!user) {
-                document.getElementById('forgotError').textContent = 'Bu e-posta adresiyle kayıtlı bir hesap bulunamadı!';
-                document.getElementById('forgotError').style.display = 'block';
-                return;
-            }
-            
-            const code = generateUniqueCode();
-            tempResetData = { email: email, username: user.username, code: code };
-            
-            const submitBtn = forgotForm.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.textContent;
-            submitBtn.textContent = 'Kod gönderiliyor...';
-            submitBtn.disabled = true;
-            
             try {
-                const response = await fetch('http://localhost:5678/webhook/verify-email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email, code: code })
-                });
-                if (!response.ok) throw new Error('E-posta gönderilemedi');
+                const user = await getUserByEmail(email);
+                
+                if (!user) {
+                    document.getElementById('forgotError').textContent = 'Bu e-posta adresiyle kayıtlı bir hesap bulunamadı!';
+                    document.getElementById('forgotError').style.display = 'block';
+                    return;
+                }
+                
+                const code = generateUniqueCode();
+                tempResetData = { email: email, username: user.username, code: code };
+                
+                const submitBtn = forgotForm.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.textContent;
+                submitBtn.textContent = 'Kod gönderiliyor...';
+                submitBtn.disabled = true;
+                
+                try {
+                    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+                        email: email,
+                        code: code
+                    });
+                    console.log('✅ Sıfırlama kodu gönderildi:', email);
+                } catch (err) {
+                    console.error('EmailJS hatası:', err);
+                    alert(`E-posta servisi şu an çalışmıyor.\nSıfırlama kodunuz: ${code}`);
+                } finally {
+                    submitBtn.textContent = originalBtnText;
+                    submitBtn.disabled = false;
+                }
+                
+                document.getElementById('forgotBox').style.display = 'none';
+                document.getElementById('resetBox').style.display = 'block';
+                document.getElementById('resetError').style.display = 'none';
+                document.getElementById('forgotError').style.display = 'none';
             } catch (err) {
-                console.error('n8n webhook hatası:', err);
-                alert(`E-posta servisi şu an çalışmıyor.\nSıfırlama kodunuz: ${code}`);
-            } finally {
-                submitBtn.textContent = originalBtnText;
-                submitBtn.disabled = false;
+                console.error('Şifre sıfırlama hatası:', err);
+                document.getElementById('forgotError').textContent = 'Sunucu bağlantısı hatası! Tekrar deneyin.';
+                document.getElementById('forgotError').style.display = 'block';
             }
-            
-            document.getElementById('forgotBox').style.display = 'none';
-            document.getElementById('resetBox').style.display = 'block';
-            document.getElementById('resetError').style.display = 'none';
-            document.getElementById('forgotError').style.display = 'none';
         });
     }
 
-    // Forgot Password: Verify code and set new password
+    // ==========================================
+    // ŞİFRE SIFIRLAMA: Kod doğrula ve yeni şifre
+    // ==========================================
     if (resetForm2) {
         resetForm2.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -227,29 +286,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
+            // Şifre güvenlik kuralları kontrolü
+            const passwordError = validatePassword(newPass);
+            if (passwordError) {
+                document.getElementById('resetError').textContent = passwordError;
+                document.getElementById('resetError').style.display = 'block';
+                return;
+            }
+            
             if (codeInput !== tempResetData.code) {
                 document.getElementById('resetError').textContent = 'Doğrulama kodu hatalı!';
                 document.getElementById('resetError').style.display = 'block';
                 return;
             }
             
-            // Update password in DB
-            const db = getDB();
-            const userIndex = db.users.findIndex(u => u.email === tempResetData.email);
-            if (userIndex !== -1) {
-                db.users[userIndex].passwordHash = await sha256(newPass);
-                saveDB(db);
+            try {
+                // Firestore'da şifreyi güncelle
+                const user = await getUserByEmail(tempResetData.email);
+                if (user) {
+                    user.passwordHash = await sha256(newPass);
+                    await saveUser(user);
+                }
+                
+                tempResetData = null;
+                alert('Şifreniz başarıyla güncellendi! Lütfen yeni şifrenizle giriş yapın.');
+                
+                document.getElementById('resetBox').style.display = 'none';
+                document.getElementById('loginBox').style.display = 'block';
+                resetForm2.reset();
+            } catch (err) {
+                console.error('Şifre güncelleme hatası:', err);
+                document.getElementById('resetError').textContent = 'Şifre güncellenirken bir hata oluştu!';
+                document.getElementById('resetError').style.display = 'block';
             }
-            
-            tempResetData = null;
-            alert('Şifreniz başarıyla güncellendi! Lütfen yeni şifrenizle giriş yapın.');
-            
-            document.getElementById('resetBox').style.display = 'none';
-            document.getElementById('loginBox').style.display = 'block';
-            resetForm2.reset();
         });
     }
 });
+
+// ==========================================
+// FORM GEÇİŞ FONKSİYONLARI
+// ==========================================
 
 function toggleForms() {
     const loginBox = document.getElementById('loginBox');
