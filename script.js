@@ -555,7 +555,7 @@ function setupMediaRecorder(micStream) {
     
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: 'audio/mpeg' });
+        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         audioPlayback.src = url;
         playbackContainer.style.display = 'block';
@@ -564,7 +564,7 @@ function setupMediaRecorder(micStream) {
         downloadBtn.onclick = () => {
             const a = document.createElement('a');
             a.href = url;
-            a.download = `SiNUbeatmaker_mix_${Date.now()}.mp3`;
+            a.download = `SiNUbeatmaker_mix_${Date.now()}.webm`;
             a.click();
         };
         
