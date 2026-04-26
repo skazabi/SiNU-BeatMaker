@@ -1075,19 +1075,29 @@ const PW_EMAILJS_RESET_TEMPLATE_ID = 'template_qm7kyt8';
 const PW_EMAILJS_PUBLIC_KEY = 'lByNoDcgGqq-2kbhn';
 
 // Initialize EmailJS if not already done
-if (typeof emailjs !== 'undefined') {
-    emailjs.init(PW_EMAILJS_PUBLIC_KEY);
+try {
+    if (typeof emailjs !== 'undefined') {
+        emailjs.init(PW_EMAILJS_PUBLIC_KEY);
+        console.log('EmailJS initialized for password change');
+    }
+} catch(e) {
+    console.warn('EmailJS init warning:', e);
 }
 
 let tempPasswordChangeData = null;
 
 async function initiatePasswordChange() {
+    console.log("initiatePasswordChange started");
     const currentPass = document.getElementById('currentPassword').value;
     const newPass = document.getElementById('newPassword').value;
     const newPassConfirm = document.getElementById('newPasswordConfirm').value;
     const errorEl = document.getElementById('passwordChangeError');
+    const btn = document.querySelector('#passwordChangeForm .daw-btn.primary');
+    const originalBtnText = btn ? btn.textContent : 'Şifre Değiştirme Kodu Gönder';
     
     errorEl.style.display = 'none';
+    
+    console.log("Inputs retrieved:", { currentPass: !!currentPass, newPass: !!newPass, confirm: !!newPassConfirm });
     
     // Validations
     if (!currentPass || !newPass || !newPassConfirm) {
@@ -1110,27 +1120,39 @@ async function initiatePasswordChange() {
         return;
     }
     
+    // Show loading state
+    if (btn) { btn.textContent = 'Kontrol ediliyor...'; btn.disabled = true; }
+    
     try {
+        console.log("Fetching user from DB:", user.username);
         // Verify current password
         const dbUser = await getUser(user.username);
+        console.log("DB User retrieved:", dbUser ? "Success" : "Failed");
+        
         if (!dbUser) {
             errorEl.textContent = 'Kullanıcı bulunamadı!';
             errorEl.style.display = 'block';
+            if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
             return;
         }
         
+        console.log("Hashing current password...");
         const currentHash = await sha256(currentPass);
         if (currentHash !== dbUser.passwordHash) {
+            console.log("Hash mismatch");
             errorEl.textContent = 'Mevcut şifre yanlış!';
             errorEl.style.display = 'block';
+            if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
             return;
         }
         
+        console.log("Hashing new password...");
         // Check new password is different from current
         const newHash = await sha256(newPass);
         if (newHash === dbUser.passwordHash) {
             errorEl.textContent = 'Yeni şifre mevcut şifreyle aynı olamaz!';
             errorEl.style.display = 'block';
+            if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
             return;
         }
         
@@ -1143,29 +1165,46 @@ async function initiatePasswordChange() {
             code: code
         };
         
+        if (btn) { btn.textContent = 'Kod gönderiliyor...'; }
+        console.log("Sending email...");
+        
         // Send verification email
+        let emailSent = false;
         try {
-            await emailjs.send(PW_EMAILJS_SERVICE_ID, PW_EMAILJS_RESET_TEMPLATE_ID, {
-                email: dbUser.email,
-                code: code
-            });
-            console.log('✅ Şifre değiştirme doğrulama kodu gönderildi:', dbUser.email);
+            if (typeof emailjs !== 'undefined') {
+                console.log("Calling emailjs.send");
+                await emailjs.send(PW_EMAILJS_SERVICE_ID, PW_EMAILJS_RESET_TEMPLATE_ID, {
+                    email: dbUser.email,
+                    code: code
+                });
+                emailSent = true;
+                console.log('✅ Doğrulama kodu gönderildi:', dbUser.email);
+            } else {
+                console.log("EmailJS is not defined");
+            }
         } catch (emailErr) {
             console.error('EmailJS hatası:', emailErr);
-            await showAlertDialog(`E-posta servisi şu an çalışmıyor.\nDoğrulama kodunuz: ${code}`);
         }
         
+        if (!emailSent) {
+            console.log("Email send failed, showing alert");
+            await showAlertDialog(`E-posta gönderilemedi.\nDoğrulama kodunuz: ${code}`);
+        }
+        
+        console.log("Showing verification step...");
         // Show verification step
         document.getElementById('passwordChangeForm').style.display = 'none';
         document.getElementById('passwordVerifySection').style.display = 'block';
         document.getElementById('passwordVerifyError').style.display = 'none';
         document.getElementById('passwordVerifyCode').value = '';
-        document.getElementById('passwordVerifyCode').focus();
+        setTimeout(() => document.getElementById('passwordVerifyCode').focus(), 100);
         
     } catch (err) {
-        console.error('Şifre değiştirme hatası:', err);
-        errorEl.textContent = 'Bir hata oluştu! Lütfen tekrar deneyin.';
+        console.error('Şifre değiştirme hatası (catch block):', err);
+        errorEl.textContent = 'Bir hata oluştu: ' + (err.message || 'Tekrar deneyin.');
         errorEl.style.display = 'block';
+    } finally {
+        if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
     }
 }
 
