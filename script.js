@@ -1156,6 +1156,13 @@ async function initiatePasswordChange() {
             return;
         }
         
+        if (!dbUser.email) {
+            errorEl.textContent = 'Hesabınıza kayıtlı bir e-posta adresi bulunamadı! Eski hesaplarda e-posta adresi olmayabilir.';
+            errorEl.style.display = 'block';
+            if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
+            return;
+        }
+        
         // Generate verification code
         const code = generateVerifyCode();
         tempPasswordChangeData = {
@@ -1194,6 +1201,22 @@ async function initiatePasswordChange() {
         console.log("Showing verification step...");
         // Show verification step
         document.getElementById('passwordChangeForm').style.display = 'none';
+        
+        // E-postayı maskeleyerek gösterelim (örn: a***@gmail.com)
+        const emailParts = dbUser.email.split('@');
+        let maskedEmail = dbUser.email;
+        if (emailParts.length === 2) {
+            const namePart = emailParts[0];
+            const domainPart = emailParts[1];
+            maskedEmail = namePart.charAt(0) + '***@' + domainPart;
+        }
+        
+        // Açıklama metnini güncelle
+        const descEl = document.querySelector('#passwordVerifySection p');
+        if (descEl) {
+            descEl.innerHTML = `<b>${maskedEmail}</b> adresinize gönderilen 6 haneli<br>doğrulama kodunu girin:`;
+        }
+        
         document.getElementById('passwordVerifySection').style.display = 'block';
         document.getElementById('passwordVerifyError').style.display = 'none';
         document.getElementById('passwordVerifyCode').value = '';
