@@ -131,40 +131,6 @@
             </div>
             <button class="daw-btn primary w-100" onclick="saveNickname()" style="margin-top:10px;">Kaydet</button>
             
-            <!-- Divider -->
-            <hr style="border: 1px solid rgba(255,255,255,0.1); margin: 25px 0;">
-            
-            <!-- Password Change Section -->
-            <h3 style="color: var(--accent-secondary); margin-bottom: 15px;">🔒 Şifre Değiştir</h3>
-            <div id="passwordChangeForm">
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label>Mevcut Şifre</label>
-                    <input type="password" id="currentPassword" class="daw-input" style="width:100%;" placeholder="Mevcut şifrenizi girin">
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label>Yeni Şifre</label>
-                    <input type="password" id="newPassword" class="daw-input" style="width:100%;" placeholder="En az 8 karakter, 1 büyük harf, 1 özel karakter">
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <label>Yeni Şifre (Tekrar)</label>
-                    <input type="password" id="newPasswordConfirm" class="daw-input" style="width:100%;" placeholder="Yeni şifrenizi tekrar girin">
-                </div>
-                <p id="passwordChangeError" style="color: #ef4444; display: none; margin-bottom: 10px; font-size: 0.9rem;"></p>
-                <button class="daw-btn primary w-100" onclick="initiatePasswordChange()">Şifre Değiştirme Kodu Gönder</button>
-            </div>
-            
-            <!-- Verification Code Step (hidden initially) -->
-            <div id="passwordVerifySection" style="display: none;">
-                <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">E-posta adresinize gönderilen 6 haneli doğrulama kodunu girin:</p>
-                <div class="form-group" style="margin-bottom: 12px;">
-                    <input type="text" id="passwordVerifyCode" class="daw-input" style="width:100%; text-align: center; font-size: 1.3rem; letter-spacing: 8px;" placeholder="______" maxlength="6">
-                </div>
-                <p id="passwordVerifyError" style="color: #ef4444; display: none; margin-bottom: 10px; font-size: 0.9rem;"></p>
-                <div style="display: flex; gap: 10px;">
-                    <button class="daw-btn" onclick="cancelPasswordChange()" style="flex:1;">Iptal</button>
-                    <button class="daw-btn primary" onclick="confirmPasswordChange()" style="flex:1;">Onayla</button>
-                </div>
-            </div>
         </div>
     </div>
 
