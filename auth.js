@@ -138,31 +138,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 submitBtn.textContent = 'Doğrulama kodu gönderiliyor...';
                 submitBtn.disabled = true;
                 
+                let emailSent = false;
                 try {
-                    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-                        email: email,
-                        code: code
-                    });
-                    console.log('✅ Doğrulama e-postası gönderildi:', email);
-                    
-                    document.getElementById('registerBox').style.display = 'none';
-                    document.getElementById('twoFaBox').style.display = 'block';
-                    document.getElementById('twoFaError').style.display = 'none';
+                    if (typeof emailjs !== 'undefined') {
+                        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+                            email: email,
+                            code: code
+                        });
+                        emailSent = true;
+                        console.log('✅ Doğrulama e-postası gönderildi:', email);
+                    } else {
+                        console.warn('EmailJS tanımlı değil!');
+                    }
                 } catch (err) {
                     console.error('EmailJS hatası:', err);
-                    // Fallback: e-posta gönderilemezse kodu alert ile göster
-                    alert(`E-posta servisi şu an çalışmıyor.\nDoğrulama kodunuz: ${code}`);
-                    document.getElementById('registerBox').style.display = 'none';
-                    document.getElementById('twoFaBox').style.display = 'block';
-                    document.getElementById('twoFaError').style.display = 'none';
-                } finally {
-                    submitBtn.textContent = originalBtnText;
-                    submitBtn.disabled = false;
                 }
+                
+                if (!emailSent) {
+                    alert(`E-posta gönderilemedi.\nDoğrulama kodunuz: ${code}`);
+                }
+                
+                // Mask email for UI
+                const emailParts = email.split('@');
+                let maskedEmail = email;
+                if (emailParts.length === 2) {
+                    maskedEmail = emailParts[0].charAt(0) + '***@' + emailParts[1];
+                }
+                const twoFaDesc = document.querySelector('#twoFaBox p');
+                if (twoFaDesc) {
+                    twoFaDesc.innerHTML = `<b>${maskedEmail}</b> adresinize gönderilen 6 haneli doğrulama kodunu giriniz.`;
+                }
+
+                document.getElementById('registerBox').style.display = 'none';
+                document.getElementById('twoFaBox').style.display = 'block';
+                document.getElementById('twoFaError').style.display = 'none';
+                
+                submitBtn.textContent = originalBtnText;
+                submitBtn.disabled = false;
+                
             } catch (err) {
                 console.error('Kayıt hatası:', err);
                 document.getElementById('regError').textContent = 'Sunucu bağlantısı hatası! Lütfen tekrar deneyin.';
                 document.getElementById('regError').style.display = 'block';
+                const submitBtn = registerForm.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.textContent = 'Kayıt Ol (Doğrulama Kodu Gönder)';
+                    submitBtn.disabled = false;
+                }
             }
         });
     }
