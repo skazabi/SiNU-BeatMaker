@@ -56,7 +56,7 @@
             <div class="panel-section">
                 <h4>Vokal / Ses Kanalı</h4>
                 <input type="file" id="vocalUpload" accept="audio/*" class="daw-input">
-                <audio id="vocalAudio" controls style="width: 100%; display: none; margin-top: 10px;"></audio>
+                <audio id="vocalAudio" controls controlsList="nodownload" style="width: 100%; display: none; margin-top: 10px;"></audio>
             </div>
             <div class="panel-section">
                 <h4>Kayıt &amp; Dışa Aktar</h4>
@@ -65,7 +65,7 @@
             </div>
             <div id="playbackContainer" class="panel-section" style="display:none;">
                 <h4 style="color: #10b981;">Kayıt Hazır!</h4>
-                <audio id="audioPlayback" controls style="width: 100%; margin-top: 10px;"></audio>
+                <audio id="audioPlayback" controls controlsList="nodownload" style="width: 100%; margin-top: 10px;"></audio>
                 <div style="display: flex; gap: 8px; margin-top: 10px;">
                     <button id="saveRecordingBtn" class="daw-btn primary" style="flex:1;">💾 MP3 Kaydet</button>
                     <button class="daw-btn danger" onclick="deleteCurrentRecording()" style="flex:1;">Çöpe At</button>

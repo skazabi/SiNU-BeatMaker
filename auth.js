@@ -4,10 +4,10 @@
  */
 
 // EmailJS Yapılandırma
-const EMAILJS_SERVICE_ID = 'service_d2efpvb';
-const EMAILJS_TEMPLATE_ID = 'template_m2bp3ut'; // Kayıt Doğrulama İçin
-const EMAILJS_RESET_TEMPLATE_ID = 'template_qm7kyt8'; // Şifre Sıfırlama İçin
-const EMAILJS_PUBLIC_KEY = 'lByNoDcgGqq-2kbhn';
+const EMAILJS_SERVICE_ID = 'service_3i6il5o';
+const EMAILJS_TEMPLATE_ID = 'template_tfdzgbn'; // Kayıt Doğrulama İçin
+const EMAILJS_RESET_TEMPLATE_ID = 'template_anplvdg'; // Şifre Sıfırlama İçin
+const EMAILJS_PUBLIC_KEY = '4WIh08oC-e2g5n0_M';
 
 // EmailJS'i başlat
 if (typeof emailjs !== 'undefined') {

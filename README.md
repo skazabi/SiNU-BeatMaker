@@ -40,4 +40,9 @@ Projeyi kendi bilgisayarınızda çalıştırmak veya geliştirmek için:
 ## 🌐 Canlı Önizleme
 
 Uygulamanın çalışan en güncel sürümüne şu adresten ulaşabilirsiniz:
-👉 [**BEATFORGE (SiNU BeatMaker) Web App**](https://sinu-beatmaker-baaed.web.app)
+👉 [**BEATFORGE (SiNU BeatMaker) Web App**](https://sinu-beatmaker-979cc.web.app)
+
+*Son Güncellemeler (v1.1):*
+- Yeni Firebase ve EmailJS entegrasyonu sağlandı (E-postalar `snubeatmaker.noreply@gmail.com` adresinden html template ile iletilir).
+- Firestore veritabanı güvenlik kuralları (`firestore.rules`) ayarlandı.
+- Audio elementinin kendi indirme butonu `controlsList="nodownload"` ile kapatılıp, arayüzdeki MP3 kaydet butonlarının kullanılması mecbur kılındı.
