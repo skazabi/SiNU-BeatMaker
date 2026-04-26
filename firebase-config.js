@@ -6,13 +6,13 @@
  */
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCakDDuBRJX0W9b7quT4trkgwX1-GZ-Jkg",
-    authDomain: "sinu-beatmaker.firebaseapp.com",
-    projectId: "sinu-beatmaker",
-    storageBucket: "sinu-beatmaker.firebasestorage.app",
-    messagingSenderId: "815607697602",
-    appId: "1:815607697602:web:a5fac2bd5fd5e0a1baeb5b",
-    measurementId: "G-351DCM3WWZ"
+    apiKey: "AIzaSyDE7KCkghcZklAT82jF8M3oqZO7PFuRyNs",
+    authDomain: "sinu-beatmaker-baaed.firebaseapp.com",
+    projectId: "sinu-beatmaker-baaed",
+    storageBucket: "sinu-beatmaker-baaed.firebasestorage.app",
+    messagingSenderId: "617702393922",
+    appId: "1:617702393922:web:2d0b8ae503598cc3e6c5db",
+    measurementId: "G-QY0PXQLVK4"
 };
 
 // Firebase'i başlat
