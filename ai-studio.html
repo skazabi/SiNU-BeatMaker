@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BEATFORGE - AI Music Studio</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- REST API Database Layer -->
+    <script src="db.js"></script>
+    <script>checkAuth();</script>
+</head>
+<body class="ai-studio-body">
+
+    <!-- Arka plan neon ışık balonları -->
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- Top Header -->
+    <header class="daw-header">
+        <div class="header-left">
+            <div class="logo glitch" data-text="BEATFORGE" onclick="window.location.href='beatmaker.html'">BEATFORGE</div>
+            <nav class="header-nav">
+                <a href="beatmaker.html">Beatmaker Sequencer</a>
+                <a href="ai-studio.html" class="active">AI Music Studio 🎵</a>
+                <a href="profile.html">Profil</a>
+            </nav>
+        </div>
+        <div class="header-right">
+            <span id="welcomeUser" class="user-greeting"></span>
+            <button class="daw-btn" onclick="logoutUser()">Çıkış Yap</button>
+        </div>
+    </header>
+
+    <!-- Ana Arayüz Tasarımı -->
+    <main class="ai-studio-container">
+        <div class="ai-studio-grid">
+            
+            <!-- SOL KOLON: Parametre Giriş Formu -->
+            <section class="ai-panel ai-input-panel">
+                <div class="panel-header">
+                    <h2>🎵 AI Music Studio</h2>
+                    <p class="panel-subtitle">ACE-Step 1.5 XL Turbo ile yapay zeka müzik üretimi</p>
+                </div>
+                
+                <form id="aiGenerationForm" class="ai-form">
+                    
+                    <!-- Task Type -->
+                    <div class="form-group-ai">
+                        <label>🎯 Görev Tipi</label>
+                        <div class="ai-radio-group">
+                            <label class="ai-radio-btn active" id="lblText2Music">
+                                <input type="radio" name="task_type" value="text2music" checked onclick="toggleTaskFields('text2music')">
+                                Text to Music
+                            </label>
+                            <label class="ai-radio-btn" id="lblCover">
+                                <input type="radio" name="task_type" value="cover" onclick="toggleTaskFields('cover')">
+                                Cover Mode
+                            </label>
+                            <label class="ai-radio-btn" id="lblRepaint">
+                                <input type="radio" name="task_type" value="repaint" onclick="toggleTaskFields('repaint')">
+                                Repaint Mode
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Caption (Prompt) / Random Dice -->
+                    <div class="form-group-ai">
+                        <div class="label-header">
+                            <label for="aiCaption">🎶 Müzik Tarzı &amp; Açıklama (Caption)</label>
+                            <button type="button" id="btnRandomCaption" class="icon-btn-ai" title="Rastgele tarz yarat" onclick="getRandomCaption()">🎲</button>
+                        </div>
+                        <textarea id="aiCaption" rows="3" required placeholder="Örn: 80s synth-pop with shimmering pads, soft vocals, and a slow dance groove."></textarea>
+                    </div>
+
+                    <!-- Lyrics (Sözler) -->
+                    <div class="form-group-ai">
+                        <div class="label-header">
+                            <label for="aiLyrics">🎤 Şarkı Sözleri (Lyrics)</label>
+                            <div class="lyrics-actions">
+                                <button type="button" class="text-link-btn" onclick="setInstrumental()">Pure Instrumental</button>
+                            </div>
+                        </div>
+                        <textarea id="aiLyrics" rows="4" placeholder="Sözleri buraya yazın veya enstrümantal için [Instrumental] butonuna tıklayın."></textarea>
+                    </div>
+
+                    <!-- Metadata Grid (BPM, Key, Time Signature, Language, Duration) -->
+                    <div class="metadata-grid-ai">
+                        <div class="form-group-ai">
+                            <label for="aiBpm">🥁 BPM (Hız)</label>
+                            <input type="number" id="aiBpm" min="30" max="300" placeholder="Oto">
+                        </div>
+                        <div class="form-group-ai">
+                            <label for="aiKey">🎹 Key (Ton)</label>
+                            <select id="aiKey">
+                                <option value="">Otomatik</option>
+                                <option value="C major">C Major</option>
+                                <option value="C minor">C Minor</option>
+                                <option value="D major">D Major</option>
+                                <option value="D minor">D Minor</option>
+                                <option value="E major">E Major</option>
+                                <option value="E minor">E Minor</option>
+                                <option value="F major">F Major</option>
+                                <option value="F minor">F Minor</option>
+                                <option value="G major">G Major</option>
+                                <option value="G minor">G Minor</option>
+                                <option value="A major">A Major</option>
+                                <option value="A minor">A Minor</option>
+                                <option value="B major">B Major</option>
+                                <option value="B minor">B Minor</option>
+                            </select>
+                        </div>
+                        <div class="form-group-ai">
+                            <label for="aiTimeSignature">🎼 Ölçü</label>
+                            <select id="aiTimeSignature">
+                                <option value="">Otomatik</option>
+                                <option value="4/4">4/4</option>
+                                <option value="3/4">3/4</option>
+                                <option value="6/8">6/8</option>
+                            </select>
+                        </div>
+                        <div class="form-group-ai">
+                            <label for="aiLanguage">🌐 Dil</label>
+                            <select id="aiLanguage">
+                                <option value="">Otomatik</option>
+                                <option value="tr">Türkçe</option>
+                                <option value="en">İngilizce</option>
+                                <option value="ja">Japonca</option>
+                                <option value="de">Almanca</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Süre (Duration) Slider -->
+                    <div class="form-group-ai">
+                        <div class="slider-header-ai">
+                            <label>⏱️ Müzik Süresi (Saniye)</label>
+                            <span id="durationVal">30s</span>
+                        </div>
+                        <input type="range" id="aiDuration" min="5" max="360" value="30" step="5" oninput="document.getElementById('durationVal').innerText = this.value + 's'">
+                    </div>
+
+                    <!-- AUDIO UPLOADS (Sadece Cover ve Repaint için) -->
+                    <div id="audioUploadSection" class="audio-upload-section" style="display: none;">
+                        <div class="form-group-ai">
+                            <label for="srcAudioFile">🎵 Kaynak Ses Dosyası (Source Audio)</label>
+                            <input type="file" id="srcAudioFile" accept="audio/*" class="file-input-ai">
+                            <p class="file-help-text">Cover veya Repaint modu için kılavuz ses dosyası yükleyin.</p>
+                        </div>
+                        <div class="form-group-ai">
+                            <label for="refAudioFile">🎙️ Tını Referansı (Timbre Reference - Opsiyonel)</label>
+                            <input type="file" id="refAudioFile" accept="audio/*" class="file-input-ai">
+                            <p class="file-help-text">Başka bir sesin ses karakterini kopyalamak için yükleyin.</p>
+                        </div>
+                    </div>
+
+                    <!-- REPAINT TIME SETTINGS (Sadece Repaint için) -->
+                    <div id="repaintSettingsSection" class="repaint-settings-section" style="display: none;">
+                        <div class="metadata-grid-ai">
+                            <div class="form-group-ai">
+                                <label for="aiRepaintStart">⏱️ Başlangıç (sn)</label>
+                                <input type="number" id="aiRepaintStart" value="0.0" min="0" step="0.5">
+                            </div>
+                            <div class="form-group-ai">
+                                <label for="aiRepaintEnd">⏱️ Bitiş (sn)</label>
+                                <input type="number" id="aiRepaintEnd" value="-1.0" min="-1" step="0.5">
+                            </div>
+                        </div>
+                        <p class="file-help-text">Düzenlemek istediğiniz saniye aralığını girin (-1.0 sonuna kadar demektir).</p>
+                    </div>
+
+                    <!-- ADVANCED SETTINGS ACCORDION -->
+                    <div class="ai-accordion">
+                        <div class="accordion-header" onclick="toggleAccordion()">
+                            <span>⚙️ Gelişmiş Ayarlar (Advanced Settings)</span>
+                            <span id="accordionIcon">▶</span>
+                        </div>
+                        <div class="accordion-content" id="accordionContent" style="display: none;">
+                            
+                            <!-- Thinking Mode Toggle -->
+                            <div class="form-group-ai toggle-group-ai">
+                                <label for="aiThinking">🧠 Düşünme Modu (LM CoT Planner)</label>
+                                <input type="checkbox" id="aiThinking" checked onclick="toggleThinkingFields()">
+                            </div>
+
+                            <!-- LM Model Select -->
+                            <div class="form-group-ai" id="lmModelGroup">
+                                <label for="aiLmModel">💡 Dil Modeli (Language Model)</label>
+                                <select id="aiLmModel">
+                                    <option value="acestep-5Hz-lm-1.7B">(Önerilen) 1.7B Model</option>
+                                    <option value="acestep-5Hz-lm-0.6B">0.6B Hızlı Model</option>
+                                    <option value="acestep-5Hz-lm-4B">4B Yüksek Kaliteli Model</option>
+                                </select>
+                            </div>
+
+                            <div class="metadata-grid-ai">
+                                <div class="form-group-ai">
+                                    <label for="aiSteps">🔄 İnferans Adımı</label>
+                                    <input type="number" id="aiSteps" value="8" min="1" max="100">
+                                </div>
+                                <div class="form-group-ai">
+                                    <label for="aiSeed">🎲 Seed (Tohum)</label>
+                                    <input type="number" id="aiSeed" value="-1" placeholder="-1 = Rastgele">
+                                </div>
+                                <div class="form-group-ai">
+                                    <label for="aiShift">📐 Shift</label>
+                                    <input type="number" id="aiShift" value="1.0" step="0.1" min="0">
+                                </div>
+                                <div class="form-group-ai">
+                                    <label for="aiCoverStrength">🎚️ Cover Gücü</label>
+                                    <input type="number" id="aiCoverStrength" value="1.0" step="0.1" min="0" max="1">
+                                </div>
+                            </div>
+
+                            <div class="form-group-ai">
+                                <label>🧮 Çözümleme Metodu (Inference Method)</label>
+                                <div class="ai-radio-group">
+                                    <label class="ai-radio-btn active" id="lblOde">
+                                        <input type="radio" name="infer_method" value="ode" checked> ODE
+                                    </label>
+                                    <label class="ai-radio-btn" id="lblSde">
+                                        <input type="radio" name="infer_method" value="sde"> SDE (Rastgelelik Katar)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output Tracks Slider -->
+                    <div class="form-group-ai">
+                        <div class="slider-header-ai">
+                            <label>🔢 Üretilecek Alternatif Sayısı (Tracks)</label>
+                            <span id="tracksVal">1</span>
+                        </div>
+                        <input type="range" id="aiTracks" min="1" max="4" value="1" step="1" oninput="document.getElementById('tracksVal').innerText = this.value">
+                    </div>
+
+                    <!-- Generate Button -->
+                    <button type="submit" id="btnGenerate" class="btn-generate-ai w-100">
+                        <span id="btnText">🎵 Müzik Üret (Generate)</span>
+                    </button>
+                    
+                </form>
+            </section>
+
+            <!-- SAĞ KOLON: Üretilen Şarkılar & Durum Takibi -->
+            <section class="ai-panel ai-results-panel">
+                <div class="panel-header">
+                    <h2>🎧 Stüdyo Çıktıları</h2>
+                    <p class="panel-subtitle">Üretilen şarkıları dinleyin, indirin veya sequencer'a aktarın</p>
+                </div>
+
+                <!-- Durum / Yükleme Ekranı (Progress) -->
+                <div id="statusContainer" class="status-container-ai" style="display: none;">
+                    <div class="status-box-ai">
+                        <div class="spinner-ai"></div>
+                        <h3 id="statusTitle">Müzik Üretiliyor...</h3>
+                        <p id="statusMsg">Modal GPU sunucusuna istek gönderildi. Cold start ve model yükleme süresi sebebiyle ilk üretim 1-2 dakika sürebilir.</p>
+                        <div class="progress-bar-container-ai">
+                            <div id="progressBarAi" class="progress-bar-ai"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sonuç Listesi -->
+                <div id="resultsList" class="results-list-ai">
+                    <!-- Boş Durum Şablonu -->
+                    <div class="empty-results-ai" id="emptyResults">
+                        <div class="empty-icon-ai">🎵</div>
+                        <h3>Henüz müzik üretilmedi</h3>
+                        <p>Sol taraftaki formu doldurup "Müzik Üret" butonuna basarak ilk yapay zeka müziğinizi yaratmaya başlayabilirsiniz.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Bildirim Balonu -->
+    <div id="toastNotification" class="toast-ai" style="display: none;"></div>
+
+    <script src="ai-studio.js"></script>
+</body>
+</html>
