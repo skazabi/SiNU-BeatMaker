@@ -1,51 +1,12 @@
 /**
- * SiNU-BeatMaker - Kimlik Doğrulama (Firebase Firestore + EmailJS)
- * Giriş, Kayıt, 2FA, Şifre Sıfırlama işlemleri
+ * SiNU-BeatMaker - Kimlik Doğrulama Katmanı (FastAPI)
+ * Giriş, Kayıt, Şifre Sıfırlama işlemleri
  */
-
-// EmailJS Yapılandırma
-const EMAILJS_SERVICE_ID = 'service_3i6il5o';
-const EMAILJS_TEMPLATE_ID = 'template_tfdzgbn'; // Kayıt Doğrulama İçin
-const EMAILJS_RESET_TEMPLATE_ID = 'template_anplvdg'; // Şifre Sıfırlama İçin
-const EMAILJS_PUBLIC_KEY = '4WIh08oC-e2g5n0_M';
-
-// EmailJS'i başlat
-if (typeof emailjs !== 'undefined') {
-    emailjs.init(EMAILJS_PUBLIC_KEY);
-    console.log('📧 EmailJS bağlantısı kuruldu.');
-}
-
-// SHA-256 Hash Function using Web Crypto API
-async function sha256(message) {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Generates a 6-digit string with all distinct digits
-function generateUniqueCode() {
-    let digits = '0123456789'.split('');
-    let code = '';
-    for(let i = 0; i < 6; i++) {
-        let randIndex = Math.floor(Math.random() * digits.length);
-        code += digits[randIndex];
-        digits.splice(randIndex, 1);
-    }
-    return code;
-}
-
-// Temporary storage for registration data during 2FA
-let tempRegistrationData = null;
-// Temporary storage for password reset data
-let tempResetData = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
-    const twoFaForm = document.getElementById('twoFaForm');
     const forgotForm = document.getElementById('forgotForm');
-    const resetForm2 = document.getElementById('resetForm');
     
     // ==========================================
     // GİRİŞ YAP
@@ -55,37 +16,38 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const username = document.getElementById('loginUsername').value.trim();
             const pass = document.getElementById('loginPassword').value;
-            const hash = await sha256(pass);
             
             try {
-                const user = await getUser(username);
+                // Sunucu tarafında doğrulamalı modern JWT Giriş
+                const data = await loginUserAPI(username, pass);
                 
-                if (user && user.passwordHash === hash) {
-                    setCurrentUser({ username: user.username, nickname: user.nickname || user.username, role: user.role });
-                    if (user.role === 'admin') {
-                        window.location.href = 'admin.html';
-                    } else {
-                        window.location.href = 'beatmaker.html';
-                    }
+                // Session bilgisini yerel depolama ile güncelle
+                setCurrentUser({ 
+                    username: data.username, 
+                    nickname: data.username, 
+                    role: data.role 
+                });
+                
+                if (data.role === 'admin') {
+                    window.location.href = 'admin.html';
                 } else {
-                    document.getElementById('loginError').textContent = 'Hatalı kullanıcı adı veya şifre!';
-                    document.getElementById('loginError').style.display = 'block';
+                    window.location.href = 'beatmaker.html';
                 }
             } catch (err) {
                 console.error('Giriş hatası:', err);
-                document.getElementById('loginError').textContent = 'Sunucu bağlantısı hatası! Lütfen tekrar deneyin.';
+                document.getElementById('loginError').textContent = err.message || 'Hatalı kullanıcı adı veya şifre!';
                 document.getElementById('loginError').style.display = 'block';
             }
         });
     }
 
     // ==========================================
-    // KAYIT OL
+    // KAYIT OL (Doğrudan)
     // ==========================================
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('regEmail').value.trim() + '@gmail.com';
+            const email = document.getElementById('regEmail').value.trim();
             const username = document.getElementById('regUsername').value.trim();
             const pass = document.getElementById('regPassword').value;
             const passConfirm = document.getElementById('regPasswordConfirm').value;
@@ -106,83 +68,56 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             try {
-                // Kullanıcı adı kontrolü
-                const existingUser = await getUser(username);
-                if (existingUser) {
+                // Kullanıcı adı benzersizlik kontrolü (FastAPI API üzerinden)
+                const usernameRes = await fetch(`${API_URL}/auth/check-username?username=${encodeURIComponent(username)}`);
+                const usernameData = await usernameRes.json();
+                if (!usernameData.available) {
                     document.getElementById('regError').textContent = 'Bu kullanıcı adı zaten alınmış!';
                     document.getElementById('regError').style.display = 'block';
                     return;
                 }
                 
-                // E-posta kontrolü
-                const existingEmail = await getUserByEmail(email);
-                if (existingEmail) {
+                // E-posta benzersizlik kontrolü (FastAPI API üzerinden)
+                const emailRes = await fetch(`${API_URL}/auth/check-email?email=${encodeURIComponent(email)}`);
+                const emailData = await emailRes.json();
+                if (!emailData.available) {
                     document.getElementById('regError').textContent = 'Bu e-posta adresi zaten kullanımda!';
                     document.getElementById('regError').style.display = 'block';
                     return;
                 }
                 
-                const hash = await sha256(pass);
-                const code = generateUniqueCode();
-                
-                tempRegistrationData = {
-                    email: email,
-                    username: username,
-                    passwordHash: hash,
-                    code: code
-                };
-                
-                // EmailJS ile doğrulama e-postası gönder
                 const submitBtn = registerForm.querySelector('button[type="submit"]');
                 const originalBtnText = submitBtn.textContent;
-                submitBtn.textContent = 'Doğrulama kodu gönderiliyor...';
+                submitBtn.textContent = 'Kayıt yapılıyor...';
                 submitBtn.disabled = true;
                 
-                let emailSent = false;
-                try {
-                    if (typeof emailjs !== 'undefined') {
-                        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-                            email: email,
-                            code: code
-                        });
-                        emailSent = true;
-                        console.log('✅ Doğrulama e-postası gönderildi:', email);
-                    } else {
-                        console.warn('EmailJS tanımlı değil!');
-                    }
-                } catch (err) {
-                    console.error('EmailJS hatası:', err);
-                }
+                // Doğrudan backend'e kaydet (Şifre sunucuda bcrypt'lenecek)
+                await saveUser({
+                    username: username,
+                    nickname: username,
+                    email: email,
+                    password: pass,
+                    role: 'user'
+                });
                 
-                if (!emailSent) {
-                    alert(`E-posta gönderilemedi.\nDoğrulama kodunuz: ${code}`);
-                }
+                alert('Kayıt başarılı! Lütfen giriş yapın.');
                 
-                // Mask email for UI
-                const emailParts = email.split('@');
-                let maskedEmail = email;
-                if (emailParts.length === 2) {
-                    maskedEmail = emailParts[0].charAt(0) + '***@' + emailParts[1];
-                }
-                const twoFaDesc = document.querySelector('#twoFaBox p');
-                if (twoFaDesc) {
-                    twoFaDesc.innerHTML = `<b>${maskedEmail}</b> adresinize gönderilen 6 haneli doğrulama kodunu giriniz.`;
-                }
-
+                // Giriş kutusuna yönlendir
                 document.getElementById('registerBox').style.display = 'none';
-                document.getElementById('twoFaBox').style.display = 'block';
-                document.getElementById('twoFaError').style.display = 'none';
+                document.getElementById('loginBox').style.display = 'block';
                 
+                // Formları sıfırla
+                registerForm.reset();
                 submitBtn.textContent = originalBtnText;
                 submitBtn.disabled = false;
                 
             } catch (err) {
                 console.error('Kayıt hatası:', err);
-                document.getElementById('regError').textContent = 'Sunucu bağlantısı hatası! Lütfen tekrar deneyin.';
+                document.getElementById('regError').textContent = err.message || 'Kayıt sırasında bir hata oluştu! Tekrar deneyin.';
                 document.getElementById('regError').style.display = 'block';
                 const submitBtn = registerForm.querySelector('button[type="submit"]');
                 if (submitBtn) {
-                    submitBtn.textContent = 'Kayıt Ol (Doğrulama Kodu Gönder)';
+                    submitBtn.textContent = 'Kayıt Ol';
                     submitBtn.disabled = false;
                 }
             }
@@ -190,61 +125,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 2FA DOĞRULAMA (Kayıt tamamlama)
-    // ==========================================
-    if (twoFaForm) {
-        twoFaForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const codeInput = document.getElementById('twoFaCode').value.trim();
-            
-            if (!tempRegistrationData) {
-                alert('Kayıt verisi bulunamadı. Lütfen baştan başlayın.');
-                cancel2FA();
-                return;
-            }
-            
-            if (codeInput === tempRegistrationData.code) {
-                // Code matches, finalize registration in Firestore
-                try {
-                    await saveUser({
-                        username: tempRegistrationData.username,
-                        nickname: tempRegistrationData.username, // Default nickname
-                        email: tempRegistrationData.email,
-                        passwordHash: tempRegistrationData.passwordHash,
-                        role: 'user'
-                    });
-                    
-                    tempRegistrationData = null;
-                    alert('Kayıt ve e-posta doğrulama başarılı! Lütfen giriş yapın.');
-                    
-                    document.getElementById('twoFaBox').style.display = 'none';
-                    document.getElementById('loginBox').style.display = 'block';
-                    
-                    // Reset forms
-                    document.getElementById('registerForm').reset();
-                    document.getElementById('twoFaForm').reset();
-                } catch (err) {
-                    console.error('Kayıt kaydetme hatası:', err);
-                    document.getElementById('twoFaError').textContent = 'Kayıt sırasında bir hata oluştu! Tekrar deneyin.';
-                    document.getElementById('twoFaError').style.display = 'block';
-                }
-            } else {
-                document.getElementById('twoFaError').textContent = 'Doğrulama kodu hatalı!';
-                document.getElementById('twoFaError').style.display = 'block';
-            }
-        });
-    }
-
-    // ==========================================
-    // ŞİFREMİ UNUTTUM: Sıfırlama kodu gönder
+    // ŞİFREMİ SIFIRLA (Doğrudan)
     // ==========================================
     if (forgotForm) {
         forgotForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const emailInput = document.getElementById('forgotEmail').value.trim();
-            const email = emailInput + '@gmail.com';
+            const email = document.getElementById('forgotEmail').value.trim();
+            const newPass = document.getElementById('forgotNewPassword').value;
+            const newPassConfirm = document.getElementById('forgotNewPasswordConfirm').value;
+            
+            if (newPass !== newPassConfirm) {
+                document.getElementById('forgotError').textContent = 'Şifreler eşleşmiyor!';
+                document.getElementById('forgotError').style.display = 'block';
+                return;
+            }
+            
+            // Şifre güvenlik kuralları kontrolü
+            const passwordError = validatePassword(newPass);
+            if (passwordError) {
+                document.getElementById('forgotError').textContent = passwordError;
+                document.getElementById('forgotError').style.display = 'block';
+                return;
+            }
             
             try {
+                // E-posta ile kayıtlı kullanıcı sorgula (FastAPI API)
                 const user = await getUserByEmail(email);
                 
                 if (!user) {
@@ -253,94 +158,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                const code = generateUniqueCode();
-                tempResetData = { email: email, username: user.username, code: code };
-                
                 const submitBtn = forgotForm.querySelector('button[type="submit"]');
                 const originalBtnText = submitBtn.textContent;
-                submitBtn.textContent = 'Kod gönderiliyor...';
+                submitBtn.textContent = 'Güncelleniyor...';
                 submitBtn.disabled = true;
                 
-                try {
-                    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_RESET_TEMPLATE_ID, {
-                        email: email,
-                        code: code
-                    });
-                    console.log('✅ Sıfırlama kodu gönderildi:', email);
-                } catch (err) {
-                    console.error('EmailJS hatası:', err);
-                    alert(`E-posta servisi şu an çalışmıyor.\nSıfırlama kodunuz: ${code}`);
-                } finally {
-                    submitBtn.textContent = originalBtnText;
-                    submitBtn.disabled = false;
-                }
+                // Şifreyi FastAPI backend üzerinde doğrudan sıfırla (onay kodsuz)
+                await resetPasswordAPI(email, newPass);
                 
-                document.getElementById('forgotBox').style.display = 'none';
-                document.getElementById('resetBox').style.display = 'block';
-                document.getElementById('resetError').style.display = 'none';
-                document.getElementById('forgotError').style.display = 'none';
-            } catch (err) {
-                console.error('Şifre sıfırlama hatası:', err);
-                document.getElementById('forgotError').textContent = 'Sunucu bağlantısı hatası! Tekrar deneyin.';
-                document.getElementById('forgotError').style.display = 'block';
-            }
-        });
-    }
-
-    // ==========================================
-    // ŞİFRE SIFIRLAMA: Kod doğrula ve yeni şifre
-    // ==========================================
-    if (resetForm2) {
-        resetForm2.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const codeInput = document.getElementById('resetCode').value.trim();
-            const newPass = document.getElementById('resetNewPassword').value;
-            const newPassConfirm = document.getElementById('resetNewPasswordConfirm').value;
-            
-            if (!tempResetData) {
-                alert('Sıfırlama verisi bulunamadı. Lütfen baştan başlayın.');
-                cancelForgot();
-                return;
-            }
-            
-            if (newPass !== newPassConfirm) {
-                document.getElementById('resetError').textContent = 'Şifreler eşleşmiyor!';
-                document.getElementById('resetError').style.display = 'block';
-                return;
-            }
-            
-            // Şifre güvenlik kuralları kontrolü
-            const passwordError = validatePassword(newPass);
-            if (passwordError) {
-                document.getElementById('resetError').textContent = passwordError;
-                document.getElementById('resetError').style.display = 'block';
-                return;
-            }
-            
-            if (codeInput !== tempResetData.code) {
-                document.getElementById('resetError').textContent = 'Doğrulama kodu hatalı!';
-                document.getElementById('resetError').style.display = 'block';
-                return;
-            }
-            
-            try {
-                // Firestore'da şifreyi güncelle
-                const user = await getUserByEmail(tempResetData.email);
-                if (user) {
-                    user.passwordHash = await sha256(newPass);
-                    await saveUser(user);
-                }
-                
-                tempResetData = null;
                 alert('Şifreniz başarıyla güncellendi! Lütfen yeni şifrenizle giriş yapın.');
                 
-                document.getElementById('resetBox').style.display = 'none';
+                document.getElementById('forgotBox').style.display = 'none';
                 document.getElementById('loginBox').style.display = 'block';
-                resetForm2.reset();
+                forgotForm.reset();
+                
+                submitBtn.textContent = originalBtnText;
+                submitBtn.disabled = false;
             } catch (err) {
                 console.error('Şifre güncelleme hatası:', err);
-                document.getElementById('resetError').textContent = 'Şifre güncellenirken bir hata oluştu!';
-                document.getElementById('resetError').style.display = 'block';
+                document.getElementById('forgotError').textContent = err.message || 'Şifre güncellenirken bir hata oluştu!';
+                document.getElementById('forgotError').style.display = 'block';
+                const submitBtn = forgotForm.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.textContent = 'Şifreyi Güncelle';
+                    submitBtn.disabled = false;
+                }
             }
         });
     }
@@ -353,48 +195,29 @@ document.addEventListener('DOMContentLoaded', () => {
 function toggleForms() {
     const loginBox = document.getElementById('loginBox');
     const registerBox = document.getElementById('registerBox');
-    const twoFaBox = document.getElementById('twoFaBox');
     const forgotBox = document.getElementById('forgotBox');
-    const resetBox = document.getElementById('resetBox');
     
     if (loginBox.style.display === 'none') {
         loginBox.style.display = 'block';
         registerBox.style.display = 'none';
-        twoFaBox.style.display = 'none';
         if (forgotBox) forgotBox.style.display = 'none';
-        if (resetBox) resetBox.style.display = 'none';
     } else {
         loginBox.style.display = 'none';
         registerBox.style.display = 'block';
-        twoFaBox.style.display = 'none';
         if (forgotBox) forgotBox.style.display = 'none';
-        if (resetBox) resetBox.style.display = 'none';
     }
-}
-
-function cancel2FA() {
-    tempRegistrationData = null;
-    document.getElementById('twoFaForm').reset();
-    document.getElementById('twoFaBox').style.display = 'none';
-    document.getElementById('registerBox').style.display = 'block';
 }
 
 function showForgotPassword() {
     document.getElementById('loginBox').style.display = 'none';
     document.getElementById('registerBox').style.display = 'none';
-    document.getElementById('twoFaBox').style.display = 'none';
     document.getElementById('forgotBox').style.display = 'block';
-    document.getElementById('resetBox').style.display = 'none';
     document.getElementById('forgotError').style.display = 'none';
 }
 
 function cancelForgot() {
-    tempResetData = null;
     document.getElementById('forgotBox').style.display = 'none';
-    document.getElementById('resetBox').style.display = 'none';
     document.getElementById('loginBox').style.display = 'block';
     const forgotForm = document.getElementById('forgotForm');
-    const resetForm = document.getElementById('resetForm');
     if (forgotForm) forgotForm.reset();
-    if (resetForm) resetForm.reset();
 }
