@@ -1,0 +1,48 @@
+from datetime import datetime, timedelta, timezone
+from typing import Union, Any, Optional
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from app.config import settings
+
+# bcrypt hash yapılandırması (şifre güvenliği için)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Girilen düz metin şifreyi, veritabanındaki bcrypt hash'i ile doğrular.
+    """
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    """
+    Şifreyi bcrypt kullanarak hash'ler.
+    """
+    return pwd_context.hash(password)
+
+def create_access_token(username: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Kullanıcı adı ve rolünü içeren, süresi belirlenmiş bir JWT token üretir.
+    """
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
+    
+    to_encode = {
+        "sub": username,
+        "role": role,
+        "exp": expire
+    }
+    
+    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return encoded_jwt
+
+def decode_token(token: str) -> Optional[dict]:
+    """
+    JWT token'ı çözer ve içindeki payload'ı doğrular. Süresi dolmuşsa veya geçersizse None döner.
+    """
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        return payload
+    except JWTError:
+        return None
