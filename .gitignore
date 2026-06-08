@@ -1,1 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Ortam değişkenleri
+.env
+
+# Firebase (artık kullanılmıyor)
+.firebase/
 firebase-cli
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
