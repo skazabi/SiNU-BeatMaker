@@ -788,6 +788,17 @@ const vocalUpload = document.getElementById('vocalUpload');
 const vocalAudio = document.getElementById('vocalAudio');
 let vocalSourceNode = null;
 
+// AI Studio'dan gelen ses varsa otomatik yükle
+window.addEventListener('DOMContentLoaded', () => {
+    const aiAudioUrl = localStorage.getItem('import_ai_audio_url');
+    if (aiAudioUrl) {
+        vocalAudio.src = aiAudioUrl;
+        vocalAudio.style.display = 'block';
+        localStorage.removeItem('import_ai_audio_url');
+        showAlertDialog('Yapay zeka müziği başarıyla sequencer vokal kanalına yüklendi! Ritimle senkronize çalmak için Oynat (▶) butonuna basabilirsiniz.');
+    }
+});
+
 vocalUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -1120,12 +1131,17 @@ async function initiatePasswordChange() {
         return;
     }
     
+    if (newPass === currentPass) {
+        errorEl.textContent = 'Yeni şifre mevcut şifreyle aynı olamaz!';
+        errorEl.style.display = 'block';
+        return;
+    }
+    
     // Show loading state
     if (btn) { btn.textContent = 'Kontrol ediliyor...'; btn.disabled = true; }
     
     try {
         console.log("Fetching user from DB:", user.username);
-        // Verify current password
         const dbUser = await getUser(user.username);
         console.log("DB User retrieved:", dbUser ? "Success" : "Failed");
         
@@ -1136,28 +1152,8 @@ async function initiatePasswordChange() {
             return;
         }
         
-        console.log("Hashing current password...");
-        const currentHash = await sha256(currentPass);
-        if (currentHash !== dbUser.passwordHash) {
-            console.log("Hash mismatch");
-            errorEl.textContent = 'Mevcut şifre yanlış!';
-            errorEl.style.display = 'block';
-            if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
-            return;
-        }
-        
-        console.log("Hashing new password...");
-        // Check new password is different from current
-        const newHash = await sha256(newPass);
-        if (newHash === dbUser.passwordHash) {
-            errorEl.textContent = 'Yeni şifre mevcut şifreyle aynı olamaz!';
-            errorEl.style.display = 'block';
-            if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
-            return;
-        }
-        
         if (!dbUser.email) {
-            errorEl.textContent = 'Hesabınıza kayıtlı bir e-posta adresi bulunamadı! Eski hesaplarda e-posta adresi olmayabilir.';
+            errorEl.textContent = 'Hesabınıza kayıtlı bir e-posta adresi bulunamadı!';
             errorEl.style.display = 'block';
             if (btn) { btn.textContent = originalBtnText; btn.disabled = false; }
             return;
@@ -1168,7 +1164,8 @@ async function initiatePasswordChange() {
         tempPasswordChangeData = {
             username: user.username,
             email: dbUser.email,
-            newPasswordHash: newHash,
+            currentPassword: currentPass,
+            newPassword: newPass,
             code: code
         };
         
@@ -1251,12 +1248,12 @@ async function confirmPasswordChange() {
     }
     
     try {
-        // Update password in Firestore
-        const dbUser = await getUser(tempPasswordChangeData.username);
-        if (dbUser) {
-            dbUser.passwordHash = tempPasswordChangeData.newPasswordHash;
-            await saveUser(dbUser);
-        }
+        // Şifreyi FastAPI API üzerinden güvenli şekilde değiştir
+        await changePasswordAPI(
+            tempPasswordChangeData.username,
+            tempPasswordChangeData.currentPassword,
+            tempPasswordChangeData.newPassword
+        );
         
         tempPasswordChangeData = null;
         cancelPasswordChange(); // Reset UI
@@ -1270,7 +1267,7 @@ async function confirmPasswordChange() {
         
     } catch (err) {
         console.error('Şifre güncelleme hatası:', err);
-        errorEl.textContent = 'Şifre güncellenirken bir hata oluştu!';
+        errorEl.textContent = err.message || 'Mevcut şifre yanlış veya sunucuda bir hata oluştu!';
         errorEl.style.display = 'block';
     }
 }

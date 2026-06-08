@@ -6,13 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Giriş - BEATFORGE</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Firebase SDK (CDN) -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    <script src="firebase-config.js"></script>
+    <!-- REST API Database Layer -->
     <script src="db.js"></script>
-    <!-- EmailJS SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script src="auth.js" defer></script>
 </head>
 
@@ -54,13 +49,8 @@
             <div id="regError" class="error-msg" style="display:none;"></div>
             <form id="registerForm">
                 <div class="form-group">
-                    <label>Gmail Adresi (Sadece kullanıcı adı)</label>
-                    <div style="display: flex;">
-                        <input type="text" id="regEmail" required placeholder="örnek"
-                            style="border-top-right-radius: 0; border-bottom-right-radius: 0; flex: 1;">
-                        <span
-                            style="background: rgba(255,255,255,0.05); padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-left: none; border-top-right-radius: 8px; border-bottom-right-radius: 8px; color: var(--text-secondary); display: flex; align-items: center;">@gmail.com</span>
-                    </div>
+                    <label>E-posta Adresi</label>
+                    <input type="email" id="regEmail" required placeholder="ornek@domain.com">
                 </div>
                 <div class="form-group">
                     <label>Kullanıcı Adı</label>
@@ -74,65 +64,32 @@
                     <label>Şifre (Tekrar)</label>
                     <input type="password" id="regPasswordConfirm" required>
                 </div>
-                <button type="submit" class="btn-primary w-100">Kayıt Ol (Doğrulama Kodu Gönder)</button>
+                <button type="submit" class="btn-primary w-100">Kayıt Ol</button>
                 <p class="toggle-text">Zaten hesabın var mı? <a href="#" onclick="toggleForms(); return false;">Giriş
                         Yap</a></p>
             </form>
         </div>
 
-        <!-- 2FA Verification Box -->
-        <div id="twoFaBox" class="form-box" style="display:none;">
-            <h2>E-posta Doğrulama</h2>
-            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:15px;">E-posta adresinize gönderilen 6 haneli doğrulama kodunu giriniz.</p>
-            <div id="twoFaError" class="error-msg" style="display:none;"></div>
-            <form id="twoFaForm">
-                <div class="form-group">
-                    <label>Doğrulama Kodu</label>
-                    <input type="text" id="twoFaCode" maxlength="6" required pattern="\d{6}">
-                </div>
-                <button type="submit" class="btn-primary w-100">Doğrula ve Hesabı Aç</button>
-                <p class="toggle-text"><a href="#" onclick="cancel2FA(); return false;">İptal Et</a></p>
-            </form>
-        </div>
-
-        <!-- Forgot Password: Email Entry -->
+        <!-- Forgot Password Form -->
         <div id="forgotBox" class="form-box" style="display:none;">
-            <h2>Şifremi Unuttum / Sıfırla</h2>
-            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:15px;">Kayıtlı e-posta adresinizi girin. Şifre sıfırlama kodu göndereceğiz.</p>
+            <h2>Şifremi Sıfırla</h2>
+            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:15px;">Kayıtlı e-posta adresinizi ve yeni şifrenizi girerek şifrenizi güncelleyin.</p>
             <div id="forgotError" class="error-msg" style="display:none;"></div>
             <form id="forgotForm">
                 <div class="form-group">
-                    <label>Gmail Adresi (Sadece kullanıcı adı)</label>
-                    <div style="display: flex;">
-                        <input type="text" id="forgotEmail" required placeholder="örnek" style="border-top-right-radius: 0; border-bottom-right-radius: 0; flex: 1;">
-                        <span style="background: rgba(255,255,255,0.05); padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-left: none; border-top-right-radius: 8px; border-bottom-right-radius: 8px; color: var(--text-secondary); display: flex; align-items: center;">@gmail.com</span>
-                    </div>
-                </div>
-                <button type="submit" class="btn-primary w-100">Sıfırlama Kodu Gönder</button>
-                <p class="toggle-text"><a href="#" onclick="cancelForgot(); return false;">Giriş Ekranına Dön</a></p>
-            </form>
-        </div>
-
-        <!-- Forgot Password: Code + New Password -->
-        <div id="resetBox" class="form-box" style="display:none;">
-            <h2>Yeni Şifre Belirle</h2>
-            <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:15px;">E-postanıza gönderilen 6 haneli kodu ve yeni şifrenizi girin.</p>
-            <div id="resetError" class="error-msg" style="display:none;"></div>
-            <form id="resetForm">
-                <div class="form-group">
-                    <label>Doğrulama Kodu</label>
-                    <input type="text" id="resetCode" maxlength="6" required pattern="\d{6}">
+                    <label>E-posta Adresi</label>
+                    <input type="email" id="forgotEmail" required placeholder="ornek@domain.com">
                 </div>
                 <div class="form-group">
                     <label>Yeni Şifre</label>
-                    <input type="password" id="resetNewPassword" required>
+                    <input type="password" id="forgotNewPassword" required>
                 </div>
                 <div class="form-group">
                     <label>Yeni Şifre (Tekrar)</label>
-                    <input type="password" id="resetNewPasswordConfirm" required>
+                    <input type="password" id="forgotNewPasswordConfirm" required>
                 </div>
                 <button type="submit" class="btn-primary w-100">Şifreyi Güncelle</button>
-                <p class="toggle-text"><a href="#" onclick="cancelForgot(); return false;">İptal Et</a></p>
+                <p class="toggle-text"><a href="#" onclick="cancelForgot(); return false;">Giriş Ekranına Dön</a></p>
             </form>
         </div>
     </div>
